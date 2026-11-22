@@ -1,0 +1,317 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Release gate</title>
+<style>
+  :root { color-scheme: light dark; --r: calc(var(--radius, 8px) * 0.625); --bw: var(--border-width, 1px); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    padding: 14px 16px 40px;
+    background: var(--background, transparent);
+    color: var(--foreground);
+    font: 13px/1.45 var(--font-sans, system-ui);
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; color: inherit; }
+  .mono { font-family: var(--font-mono, ui-monospace); font-size: 11px; }
+  .muted { color: var(--muted-foreground); }
+  .faint { color: var(--faint-foreground, var(--muted-foreground)); }
+  .label {
+    display: flex; align-items: center; gap: 8px; margin: 18px 0 4px;
+    font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-foreground);
+  }
+  .label::after { content: ""; flex: 1; height: var(--bw); background: var(--border); }
+  .btn {
+    border: var(--bw) solid var(--border); background: transparent; border-radius: var(--r);
+    padding: 3px 10px; cursor: pointer; white-space: nowrap; transition: background 90ms ease-out;
+  }
+  .btn:hover { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
+  .btn.quiet { border-color: transparent; color: var(--muted-foreground); padding: 2px 6px; }
+  .btn.quiet:hover { color: var(--foreground); }
+  .field {
+    width: 100%; padding: 6px 9px; outline: none;
+    background: color-mix(in srgb, var(--foreground) 3%, transparent);
+    border: var(--bw) solid var(--border); border-radius: var(--r);
+  }
+  .field:focus { border-color: color-mix(in srgb, var(--accent) 70%, var(--border)); }
+  .field::placeholder { color: var(--faint-foreground, var(--muted-foreground)); }
+
+  .gates { display: flex; gap: 2px; flex-wrap: wrap; align-items: center; }
+  .gate {
+    border: 0; background: transparent; border-radius: 999px; padding: 2px 10px; cursor: pointer;
+    font-size: 12px; color: var(--muted-foreground); display: inline-flex; gap: 6px; align-items: baseline;
+  }
+  .gate:hover { color: var(--foreground); }
+  .gate.on { background: color-mix(in srgb, var(--foreground) 9%, transparent); color: var(--foreground); }
+  .gate .n { font-size: 11px; color: var(--faint-foreground, var(--muted-foreground)); font-variant-numeric: tabular-nums; }
+  .gate.ready .n { color: var(--success); }
+
+  .summary { margin-top: 16px; display: flex; align-items: baseline; gap: 10px; }
+  .summary h1 { margin: 0; font-size: 16px; font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .state { font-size: 12px; font-variant-numeric: tabular-nums; }
+  .state.ready { color: var(--success); font-weight: 500; }
+  .bar { height: 4px; border-radius: 999px; margin-top: 8px; background: color-mix(in srgb, var(--foreground) 8%, transparent); overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--accent); border-radius: 999px; transition: width 220ms ease-out; }
+  .bar.ready i { background: var(--success); }
+
+  .checks { margin-top: 10px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 4px; border-radius: 5px; }
+  .check:hover { background: color-mix(in srgb, var(--foreground) 4%, transparent); }
+  .box {
+    width: 15px; height: 15px; border-radius: 4px; flex: none; margin-top: 2px; cursor: pointer; padding: 0;
+    border: 1.5px solid var(--muted-foreground); background: transparent; display: grid; place-items: center;
+    transition: background 90ms ease-out, border-color 90ms ease-out;
+  }
+  .box:hover { border-color: var(--foreground); }
+  .check.done .box { background: var(--success); border-color: var(--success); }
+  .box svg { width: 10px; height: 10px; stroke: var(--background, #000); opacity: 0; }
+  .check.done .box svg { opacity: 1; }
+  .check .main { flex: 1; min-width: 0; }
+  .check .text { overflow-wrap: anywhere; }
+  .check.done .text { color: var(--muted-foreground); }
+  .check .note { font-size: 11px; margin-top: 1px; overflow-wrap: anywhere; }
+  .check .x { visibility: hidden; }
+  .check:hover .x { visibility: visible; }
+  .add { margin-top: 8px; }
+  .foot { display: flex; gap: 6px; margin-top: 14px; justify-content: flex-end; }
+  .empty { padding: 24px 0 8px; text-align: center; color: var(--muted-foreground); }
+  .templates { display: flex; gap: 6px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+  .new { display: none; gap: 6px; margin-top: 10px; }
+  .new.on { display: flex; }
+  .toast {
+    position: fixed; left: 50%; bottom: 14px; transform: translate(-50%, 8px); opacity: 0;
+    padding: 5px 12px; border-radius: var(--r); font-size: 12px; pointer-events: none;
+    background: var(--card, var(--background)); border: var(--bw) solid var(--border);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25); transition: opacity 140ms ease-out, transform 140ms ease-out;
+  }
+  .toast.on { opacity: 1; transform: translate(-50%, 0); }
+  .toast.bad { color: var(--destructive); }
+  @media (prefers-reduced-motion: reduce) { .toast, .btn, .box, .bar i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="gates" id="gates"></div>
+<form class="new" id="new" autocomplete="off">
+  <input class="field" id="new-name" placeholder="Name the gate, such as v1.4 or Launch day" maxlength="80">
+  <button class="btn" type="submit">Add</button>
+</form>
+<div id="gate"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const TEMPLATES = {
+  Release: [
+    "CI is green on the release commit",
+    "Changelog written",
+    "Version bumped",
+    "Upgrade from the last release tested",
+    "Docs updated for what users see",
+    "Tag pushed",
+    "Release notes posted",
+  ],
+  "Pull request": [
+    "Tests pass locally",
+    "Diff read top to bottom",
+    "No debug output or stray files",
+    "Screenshots for anything that looks different",
+    "Reviewer asked",
+  ],
+  Launch: [
+    "Landing page copy checked on a phone",
+    "Analytics events firing",
+    "Error tracking on",
+    "Rollback plan written",
+    "Announcement drafted",
+    "Support inbox watched for the first day",
+  ],
+};
+const CHECK = `<svg viewBox="0 0 24 24" fill="none" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+const $ = (id) => document.getElementById(id);
+let gates = [];
+let checks = [];
+let chosen = sikemux.view.get()?.gate || null;
+
+const escape = (text) =>
+  String(text ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const newId = (prefix) => `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const who = (row) => (row.by === "person" ? "you" : row.name ? `@${row.name}` : "an agent");
+
+function ago(ms) {
+  const s = Math.max(0, (Date.now() - ms) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  return `${Math.floor(s / 86400)}d ago`;
+}
+
+let toastTimer = 0;
+function toast(text, bad) {
+  const el = $("toast");
+  el.textContent = text;
+  el.classList.toggle("bad", !!bad);
+  el.classList.add("on");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("on"), bad ? 4000 : 1600);
+}
+const fail = (error) => toast(error.message || String(error), true);
+
+const checksOf = (gate) =>
+  checks.filter(({ doc }) => doc.gate === gate).sort((a, b) => (a.doc.order ?? 0) - (b.doc.order ?? 0) || a.id.localeCompare(b.id));
+
+function tally(gate) {
+  const list = checksOf(gate);
+  const done = list.filter(({ doc }) => doc.done).length;
+  return { list, done, total: list.length, ready: list.length > 0 && done === list.length };
+}
+
+function render() {
+  const typing = document.activeElement?.id === "add-text";
+  draw();
+  if (typing) $("add-text")?.focus();
+}
+
+function draw() {
+  const open = gates.filter(({ doc }) => !doc.archived).sort((a, b) => b.at - a.at);
+  if (!open.some(({ id }) => id === chosen)) chosen = open[0]?.id ?? null;
+
+  $("gates").innerHTML =
+    open
+      .map(({ id, doc }) => {
+        const { done, total, ready } = tally(id);
+        return `<button class="gate ${id === chosen ? "on" : ""} ${ready ? "ready" : ""}" data-gate="${id}">
+          ${escape(doc.name)}<span class="n">${ready ? "ready" : `${done}/${total}`}</span></button>`;
+      })
+      .join("") + `<button class="btn quiet" id="add-gate" title="New gate">+ Gate</button>`;
+
+  const gate = open.find(({ id }) => id === chosen);
+  if (!gate) {
+    sikemux.badge(null);
+    $("gate").innerHTML = `<div class="empty">No gates yet. A gate is a checklist that must be all ticked before
+      something ships, shared by you and your agents.</div>
+      <div class="templates">${Object.keys(TEMPLATES)
+        .map((name) => `<button class="btn" data-template="${escape(name)}">Start a ${name.toLowerCase()} gate</button>`)
+        .join("")}</div>`;
+    return;
+  }
+
+  const { list, done, total, ready } = tally(gate.id);
+  sikemux.badge(total ? (ready ? "ready" : `${done}/${total}`) : null);
+  const left = total - done;
+  $("gate").innerHTML = `
+    <div class="summary">
+      <h1>${escape(gate.doc.name)}</h1>
+      <span class="state ${ready ? "ready" : "muted"}">${
+        ready ? "Ready to ship" : total ? `${done} of ${total} · ${left} left` : "No checks yet"
+      }</span>
+    </div>
+    <div class="bar ${ready ? "ready" : ""}"><i style="width:${total ? (done / total) * 100 : 0}%"></i></div>
+    <div class="checks">${list
+      .map(({ id, doc, at, ...row }) => `<div class="check ${doc.done ? "done" : ""}">
+        <button class="box" data-tick="${id}" aria-label="${doc.done ? "Untick" : "Tick"}">${CHECK}</button>
+        <div class="main">
+          <div class="text">${escape(doc.text)}</div>
+          ${doc.done || doc.note ? `<div class="note faint">${doc.note ? `${escape(doc.note)} · ` : ""}${doc.done ? `${who(row)} · ${ago(at)}` : ""}</div>` : ""}
+        </div>
+        <button class="btn quiet x" data-remove="${id}" title="Remove">×</button>
+      </div>`)
+      .join("")}</div>
+    <form class="add" id="add" autocomplete="off"><input class="field" id="add-text" placeholder="Add a check" maxlength="300"></form>
+    <div class="foot">
+      ${done ? `<button class="btn quiet" data-reset>Untick all</button>` : ""}
+      <button class="btn quiet" data-archive>${ready ? "Shipped · archive" : "Archive"}</button>
+    </div>`;
+}
+
+sikemux.watch("data", { collection: "gates" }, (list, error) => {
+  if (error) return fail(new Error(error));
+  gates = list || [];
+  render();
+});
+sikemux.watch("data", { collection: "checks" }, (list, error) => {
+  if (error) return fail(new Error(error));
+  checks = list || [];
+  render();
+});
+
+async function addGate(name, items) {
+  const id = newId("g");
+  await sikemux.data.set("gates", id, { name });
+  for (const [order, text] of (items || []).entries())
+    await sikemux.data.set("checks", `${id}-${order}`, { gate: id, text, done: false, order });
+  chosen = id;
+  sikemux.view.set({ gate: chosen });
+}
+
+document.addEventListener("click", async (event) => {
+  const target = event.target;
+  try {
+    if (target.closest("#add-gate")) {
+      $("new").classList.toggle("on");
+      return $("new-name").focus();
+    }
+    const gate = target.closest("[data-gate]")?.dataset.gate;
+    if (gate) {
+      chosen = gate;
+      sikemux.view.set({ gate });
+      return render();
+    }
+    const template = target.closest("[data-template]")?.dataset.template;
+    if (template) {
+      await addGate(template, TEMPLATES[template]);
+      return toast(`${template} gate started`);
+    }
+    const tick = target.closest("[data-tick]")?.dataset.tick;
+    if (tick) {
+      const doc = checks.find(({ id }) => id === tick)?.doc;
+      await sikemux.data.patch("checks", tick, { done: !doc?.done });
+      const others = checksOf(chosen).filter(({ id }) => id !== tick);
+      return !doc?.done && others.every(({ doc }) => doc.done) && toast("Every check is ticked");
+    }
+    const remove = target.closest("[data-remove]")?.dataset.remove;
+    if (remove) {
+      await sikemux.data.remove("checks", remove);
+      return toast("Check removed");
+    }
+    if (target.closest("[data-reset]")) {
+      for (const { id } of checksOf(chosen).filter(({ doc }) => doc.done)) await sikemux.data.patch("checks", id, { done: false, note: null });
+      return toast("Unticked");
+    }
+    if (target.closest("[data-archive]")) {
+      await sikemux.data.patch("gates", chosen, { archived: true });
+      return toast("Archived");
+    }
+  } catch (error) {
+    fail(error);
+  }
+});
+
+document.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    if (event.target.id === "new") {
+      const name = $("new-name").value.trim();
+      if (!name) return;
+      await addGate(name, []);
+      $("new").classList.remove("on");
+      $("new-name").value = "";
+      return toast("Gate added");
+    }
+    if (event.target.id === "add") {
+      const text = $("add-text").value.trim();
+      if (!text || !chosen) return;
+      const order = Math.max(-1, ...checksOf(chosen).map(({ doc }) => doc.order ?? 0)) + 1;
+      await sikemux.data.set("checks", newId("k"), { gate: chosen, text, done: false, order });
+      $("add-text").value = "";
+    }
+  } catch (error) {
+    fail(error);
+  }
+});
+
+sikemux.every(60000, () => document.activeElement?.id === "add-text" || render());
+</script>
+</body>
+</html>

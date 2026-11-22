@@ -1,0 +1,36 @@
+{
+  "name": "Release gate",
+  "icon": "check-circle",
+  "description": "Checklists that must be all ticked before something ships, shared by you and your agents. An agent ticks a check with mod_write when it has proved it, and says how in the check's note.",
+  "reads": [],
+  "writes": [],
+  "collections": {
+    "gates": {
+      "description": "A checklist, such as one release. Archived gates stay for the record and leave the picker.",
+      "schema": {
+        "type": "object",
+        "required": ["name"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "maxLength": 80 },
+          "archived": { "type": "boolean" }
+        }
+      }
+    },
+    "checks": {
+      "description": "One check of a gate, named by the gate's id. note says how it was proved, such as a CI run or commit.",
+      "schema": {
+        "type": "object",
+        "required": ["gate", "text", "done"],
+        "additionalProperties": false,
+        "properties": {
+          "gate": { "type": "string", "maxLength": 64 },
+          "text": { "type": "string", "maxLength": 300 },
+          "done": { "type": "boolean" },
+          "note": { "type": "string", "maxLength": 300 },
+          "order": { "type": "number" }
+        }
+      }
+    }
+  }
+}
